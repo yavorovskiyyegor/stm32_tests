@@ -15,23 +15,17 @@ void SysTickConfig(void) {
 
 volatile int ms_counter = 0;
 
-volatile int PD8_Duty = 0;
-
-volatile int PD9_Duty = 100;
-
-volatile int duty_counter = 0;
-
 void SysTick_Handler(void) {
 	//static volatile int ms_counter = 0;
 
 	if (ms_counter == 0) {
                 GPIOD->BSRR = GPIO_BSRR_BR12;
         }
-	if (ms_counter == 50000) {
+	if (ms_counter == 500) {
                 GPIOD->BSRR = GPIO_BSRR_BS12;
         }
 	ms_counter++;
-	if (ms_counter == 100000) {
+	if (ms_counter == 1000) {
 		ms_counter = 0;
 	}
 }
@@ -40,7 +34,7 @@ void GPIO_Config(void) {
 
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN | RCC_AHB1ENR_GPIOAEN; // enables GPIOD peripheral clock    
 
-        GPIOD->MODER |= GPIO_MODER_MODE14_0 | GPIO_MODER_MODE13_0 | GPIO_MODER_MODE12_0 | GPIO_MODER_MODE8_0 | GPIO_MODER_MODE9_0; // set mode to output
+        GPIOD->MODER |= GPIO_MODER_MODE14_0 | GPIO_MODER_MODE13_0 | GPIO_MODER_MODE12_0; // set mode to output
 
         // GPIOA->MODER &= ~GPIO_MODER_MODE0; // set A0 port as input - useless instruction they are initially outputs
 

@@ -1,0 +1,3 @@
+00 - blink red LED + activate orange LED on blue button (with mistake)
+01 - blink red LED + activate orange LED on blue button (OK)
+02 - blink red LED + activate orange LED on blue button + blink green LED using timer (SysTick)
