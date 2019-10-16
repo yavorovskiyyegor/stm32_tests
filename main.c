@@ -7,9 +7,11 @@
 #include "stm32f407xx.h" // GPIO
 #include "core_cm4.h" // SysTick
 
+#define MAX_Duty 10
+
 void SysTickConfig(void) {
-	SysTick->LOAD |= 1999;
-	SysTick->VAL |= 1999;
+	SysTick->LOAD |= 2000/MAX_Duty - 1;
+	SysTick->VAL |= 2000/MAX_Duty - 1;
 	SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
 }
 
@@ -17,7 +19,11 @@ volatile int ms_counter = 0;
 
 volatile int PD8_Duty = 0;
 
-volatile int PD9_Duty = 100;
+volatile int PD9_Duty = MAX_Duty;
+
+volatile int PD9_Duty_Up = 0;
+
+volatile int PD8_Duty_Up = 1;
 
 volatile int duty_counter = 0;
 
@@ -27,13 +33,47 @@ void SysTick_Handler(void) {
 	if (ms_counter == 0) {
                 GPIOD->BSRR = GPIO_BSRR_BR12;
         }
-	if (ms_counter == 50000) {
-                GPIOD->BSRR = GPIO_BSRR_BS12;
+	if (ms_counter == 500 * MAX_Duty) {
+		GPIOD->BSRR = GPIO_BSRR_BS12;
+	}
+	if (ms_counter == 500 * MAX_Duty - 1 || ms_counter == 1000 * MAX_Duty - 1) {
+		if (PD9_Duty_Up) {
+			PD9_Duty += 1;
+			PD9_Duty_Up = (PD9_Duty < MAX_Duty) ? 1 : 0;
+		} else {
+			PD9_Duty -= 1;
+			PD9_Duty_Up = (PD9_Duty > 0) ? 0 : 1;
+		}
+		if (PD8_Duty_Up) {
+			PD8_Duty += 1;
+			PD8_Duty_Up = (PD8_Duty < MAX_Duty) ? 1 : 0;
+		} else {
+			PD8_Duty -= 1;
+			PD8_Duty_Up = (PD8_Duty > 0) ? 0 : 1;
+		}
+		
         }
 	ms_counter++;
-	if (ms_counter == 100000) {
+	if (ms_counter == 1000 * MAX_Duty) {
 		ms_counter = 0;
 	}
+	if (duty_counter == PD9_Duty) {
+		GPIOD->BSRR = GPIO_BSRR_BR9;
+	}
+	if (duty_counter == PD8_Duty) {
+		GPIOD->BSRR = GPIO_BSRR_BR8;
+	}
+	if (duty_counter == 0 && PD8_Duty != 0) {
+		GPIOD->BSRR = GPIO_BSRR_BS8;
+	}
+	if (duty_counter == 0 && PD9_Duty != 0) {
+		GPIOD->BSRR = GPIO_BSRR_BS9;
+	}
+	duty_counter++;
+	if (duty_counter == MAX_Duty) {
+		duty_counter = 0;
+	}
+
 }
 
 void GPIO_Config(void) {
@@ -51,8 +91,8 @@ void GPIO_Config(void) {
         //GPIOD->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED14; // set output speed to low (?)
 }
 
-int main(void)
-{
+int main(void) {
+
         volatile int i;
 
 	GPIO_Config();
