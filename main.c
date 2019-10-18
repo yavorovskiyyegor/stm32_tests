@@ -15,6 +15,13 @@ void SysTickConfig(void) {
 	SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
 }
 
+void Tim2Config(void) {
+	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN; // turn on TIM2 clock
+	TIM2->CR1 |= TIM_CR1_ARPE; // enables preload register
+	TIM2->CR1 |= TIM_CR1_CKD_1; // divide clock signal by 4
+		
+}
+
 volatile int ms_counter = 0;
 
 volatile int PD8_Duty = 0;
