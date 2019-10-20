@@ -1,3 +1,6 @@
 00 - blink red LED + activate orange LED on blue button (with mistake)
 01 - blink red LED + activate orange LED on blue button (OK)
 02 - blink red LED + activate orange LED on blue button + blink green LED using timer (SysTick)
+03 - blink red LED + activate orange LED on blue button + lights up numbers from 0 to 9 on 7 segment display
+04 - blink red LED + activare orange LED on blue button + blink green LED using timer (SysTick) + 1 kHz 0..10 PWM on PD8 and PD9 pins on SysTick + PWM on PA15 using TIM2 
+05 - clocks on 7 segment displays (1 digit for seconds is missing), no set, no alarm.
