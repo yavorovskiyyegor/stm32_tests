@@ -8,6 +8,7 @@
 #include "core_cm4.h" // SysTick
 
 #define HSI_Clock_Freq 16000000
+#define RUNNING_LINE
 
 volatile uint8_t nums[10] = {0b1110111, // 0
                                 0b1000100, // 1
@@ -20,6 +21,33 @@ volatile uint8_t nums[10] = {0b1110111, // 0
                                 0b1111111, // 8
                                 0b1101111}; // 9
 
+volatile uint8_t letters[26] = {0b1011111, // A 
+				0b1111001, // b
+				0b0110011, // C
+				0b1111100, // d 
+				0b0111011, // E
+				0b0011011, // F
+				0b1110011, // G
+				0b1011001, // h
+				0b0010001, // I
+				0b1110100, // J
+				0b1011011, // k
+				0b0110001, // L
+				0b1011010, // M
+				0b1011000, // n
+				0b1111000, // o
+				0b0011111, // P
+				0b1001111, // q
+				0b0010011, // r
+				0b1101011, // S
+				0b0111001, // t
+				0b1110101, // U
+				0b1110000, // v
+				0b0101101, // W
+				0b1011101, // X
+				0b1101101, // Y
+				0b0111110}; // Z
+
 struct clock {
 	uint8_t seconds;
 	uint8_t minutes;
@@ -28,6 +56,34 @@ struct clock {
 };
 
 volatile struct clock my_clock = {0, 0, 0, 0};
+
+volatile uint8_t ch_counter = 0;
+
+volatile uint16_t str_speed = 500; // ms for one digit
+
+volatile char str[] = " Danfoss";
+
+volatile uint8_t str_len = 8;
+
+uint8_t ch2dsp(char *str, uint8_t i) {
+	char ch = 0;
+	if (ch_counter < i || ch_counter - i >= str_len) {
+		return 0;
+	}
+	ch = str[ch_counter - i];
+	if (ch < 48 || (ch > 57 && ch < 65) || (ch > 90 && ch < 97) || ch > 122) {
+		return 0;
+	}
+	if (ch >= 48 && ch =< 57) {
+		return nums[ch - 48];	
+	}
+	if (ch >= 65 && ch <= 90) {
+		return letters[ch - 65];
+	}
+	if (ch >= 97 && ch <= 122) {
+		return letters[ch - 97];
+	}
+}
 
 void Tim2Config(void) { // clock timer
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN; // turn on TIM2 clock
@@ -50,9 +106,38 @@ void Tim3Config(void) {
 }
 
 void TIM3_IRQHandler(void) {
+	static uint32_t ms_counter = 0;
 	static uint8_t current_num = 0;
 	GPIOE->BSRR = 0b111111 << 16;
 	GPIOD->BSRR = 0b11111111 << 16;
+	#ifdef RUNNING_LINE
+	switch (current_num) {
+		case 0:
+			GPIOD->BSRR = ch2dsp(str, 0);
+			GPIOE->BSRR = 0b1;
+			break;
+		case 1:
+			GPIOD->BSRR = ch2dsp(str, 1);
+                        GPIOE->BSRR = 0b10;
+			break;
+		case 2:
+			GPIOD->BSRR = ch2dsp(str, 2);
+                        GPIOE->BSRR = 0b100;
+			break;
+		case 3:
+			GPIOD->BSRR = ch2dsp(str, 3);
+                        GPIOE->BSRR = 0b1000;
+			break;
+		case 4:
+			GPIOD->BSRR = ch2dsp(str, 4);
+                        GPIOE->BSRR = 0b10000;
+			break;
+		case 5: 
+			GPIOD->BSRR = ch2dsp(str, 5);
+                        GPIOE->BSRR = 0b100000;
+			break;
+	}	
+	#else
 	switch (current_num) {
 		case 0:
 			GPIOD->BSRR = nums[my_clock.seconds % 10];
@@ -79,7 +164,10 @@ void TIM3_IRQHandler(void) {
 			break; 
 			
 	}
+	#endif
 	current_num = (current_num < 5) ? ++current_num : 0;
+	ms_counter = (ms_counter < str_speed * (str_len + 6)) ? ms_counter + 6 : 0;
+	ch_counter = ms_counter / str__speed;
 	TIM3->SR &= ~TIM_SR_UIF;	
 }
 
@@ -98,7 +186,7 @@ void GPIO_Config(void) {
 
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN | RCC_AHB1ENR_GPIOEEN; // enables GPIOD peripheral clock    
 
-        GPIOE->MODER |= GPIO_MODER_MODE0_0 | GPIO_MODER_MODE1_0 | GPIO_MODER_MODE3_0
+        GPIOE->MODER |= GPIO_MODER_MODE0_0 | GPIO_MODER_MODE1_0 | GPIO_MODER_MODE2_0
 			GPIO_MODER_MODE3_0 | GPIO_MODER_MODE4_0 | GPIO_MODER_MODE5_0; // alternative function mode
 
 	GPIOD->MODER |=   GPIO_MODER_MODE0_0 | GPIO_MODER_MODE1_0 
