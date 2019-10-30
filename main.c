@@ -63,7 +63,7 @@ struct clock {
 	// bit 1 - 24 / 12
 	// bit 2 - watch / set
 	// bit 3 - hours blink
-	// bit 4 - minutes blink
+	// bit 4 - alarm is on! (was minutes blink)
 	// bit 5 - alarm
 	// bit 6 - hours
 	// bit 7 - show_dsp
@@ -129,6 +129,15 @@ void TIM4Config(void) { // buttons timer
 	NVIC->ISER[0] |= 1 << 30;
 }
 
+void TIM5Config(void) { // Sound PWM
+	RCC->APB1ENR | RCC_APB1ENR_TIM5EN;
+	TIM5->ARR = ;
+	TIM5->PSC = HSI_Clock_Freq / ;
+	TIM5->CR1 |= TIM_CR1_URS;
+
+	NVIC->ISER[0] |= 1 << 31;
+}
+
 void TIM3_IRQHandler(void) {
 	static uint32_t ms_counter = 0;
 	static uint8_t current_num = 0;
@@ -147,23 +156,23 @@ void TIM3_IRQHandler(void) {
 			break;
 		case 1:
 			GPIOD->BSRR = ch2dsp(str, 1);
-                        GPIOE->BSRR = 0b10;
+            GPIOE->BSRR = 0b10;
 			break;
 		case 2:
 			GPIOD->BSRR = ch2dsp(str, 2);
-                        GPIOE->BSRR = 0b100;
+            GPIOE->BSRR = 0b100;
 			break;
 		case 3:
 			GPIOD->BSRR = ch2dsp(str, 3);
-                        GPIOE->BSRR = 0b1000;
+            GPIOE->BSRR = 0b1000;
 			break;
 		case 4:
 			GPIOD->BSRR = ch2dsp(str, 4);
-                        GPIOE->BSRR = 0b10000;
+            GPIOE->BSRR = 0b10000;
 			break;
 		case 5: 
 			GPIOD->BSRR = ch2dsp(str, 5);
-                        GPIOE->BSRR = 0b100000;
+            GPIOE->BSRR = 0b100000;
 			break;
 	}	
 	ms_counter = (ms_counter < str_speed * (str_len + 6)) ? ms_counter + 6 : 0;
@@ -248,6 +257,11 @@ void TIM2_IRQHandler(void) {
 		my_clock.hours = (my_clock.hours < 23) ? ++(my_clock.hours) : 0;
 		my_clock.hours_12 = (my_clock.hours_12 < 12) ? ++(my_clock.hours_12) : 1;
 	}
+	if (my_clock.hours == my_clock.hours_alm && my_clock.minutes == my_clock.minutes_alm && my_clock.seconds == 0 && my_clock.regime & 0b010000) {
+		my_clock.regime |= 0b010000;
+		// start alarm
+		// if display is off - turn on display
+	}
 	TIM2->SR &= ~TIM_SR_UIF;
 }
 
@@ -283,88 +297,124 @@ void (void) {
 
 void TIM4_IRQHandler(void) { // 50 ms
 	static uint8_t buttons_ms_counter = 0;
-	// compare current state with state on interrupt
-	switch () {
-		case 1:	// set button was pressed
-			if (!buttons_ms_counter) {   
-                                if (my_clocks.regime & 0b100) { // if set mode
-                                        my_clocks.regime ^= 0b11000; // switch parameter to set
-                                } else { // if watch 
-                                        my_clocks.regime ^= 0b1100; // on set mode
-                                }
-                        }
-			break;	
-		case 2: // mode button was pressed
-			if (!buttons_ms_counter) {
-                                if (my_clocks.regime & 0b100) { // if is set
-                                        my_clocks.regime &= 0b11100011; // off set mode
-                                } else { // if watch 
-                                        my_clocks.regime ^= 0b1; // switch alarm/time
-                                }
-                        }
-			break;
-		case 4: // plus button was pressed
-			if (!(my_clocks.regime & 0b100)) { // if watch
-				if (!buttons_ms_counter) { 
-                                	if (my_clocks.regime & 0b1) {
-                                        	my_clocks.regime ^= 0b100000;
-                                	} else {
-                                        	my_clocks.regime ^= 0b10;
-                                	}
+	static uint8_t code_counter = 4;
+	if () { // if display screen is off
+		// any button turn dispay on
+	} else if () { // if allarm is active
+		switch() {
+			case 1:
+				if (!buttons_ms_counter) {
+					code_counter = (code_counter == 4) ? --code_counter : 4;
 				}
-                        } else { // if set
-				if (!buttons_ms_counter || (buttons_ms_counter >= 20 && !(buttons_ms_counter % 2))) {
-					if (my_clocks.regime & 0b1) { // alarm
-						if (my_clocks.regime & 0b1000) { // if hours
-							my_clock.hours_alm = (my_clock.hours_alm < 23) ? ++(my_clock.hours_alm) : 0;
-				                	my_clock.hours_12_alm = (my_clock.hours_12_alm < 12) ? ++(my_clock.hours_12_alm) : 1;
-						} else { // if minutes
-							my_clock.minutes_alm = (my_clock.minutes_alm < 59) ? ++(my_clock.minutes_alm) : 0;
-						}
-					} else { // time
-						if (my_clocks.regime & 0b1000) { // if hours
-                                        	        my_clock.hours = (my_clock.hours < 23) ? ++(my_clock.hours) : 0;
-                                        	        my_clock.hours_12 = (my_clock.hours_12 < 12) ? ++(my_clock.hours_12) : 1;
-                                        	} else { // if minutes
-                                        	        my_clock.minutes = (my_clock.minutes < 59) ? ++(my_clock.minutes) : 0;
-                                        	}
+				break;
+			case 2:
+				if (!buttons_ms_counter) {
+					code_counter = (code_counter == 2) ? --code_counter : 4;
+				}
+				break;
+			case 4:
+				if (!buttons_ms_counter) { 
+					code_counter = (code_counter == 1) ? --code_counter : 4;
+				}
+				break;
+			case 8:
+				if (!buttons_ms_counter) {	
+					code_counter = (code_counter == 3) ? --code_counter : 4;
+				}
+				break;
+			default:
+				buttons_ms_timer = 0;
+                                TIM4->SR &= ~TIM_SR_UIF;
+                                // turn off timer
+                                // enable external interrupts
+                                return;
+
+				
+		}	
+	} else {
+		// compare current state with state on interrupt
+		switch () {
+			case 1:	// set button was pressed
+				if (!buttons_ms_counter) {   
+					if (my_clocks.regime & 0b100) { // if set mode
+						my_clocks.regime ^= 0b11000; // switch parameter to set
+					} else { // if watch 
+						my_clocks.regime ^= 0b1100; // on set mode
 					}
 				}
-			} 
-			break;
-		case 8: // minus button was pressed
-			if (!(my_clocks.regime & 0b100) && !buttons_ms_counter) { // if watch 
-				if (my_clocks.regime & 0b1) {
-					my_clocks.regime ^= 0b1000000;
-				} else {
-					my_clocks.regime ^= 0b10000000;
+				break;	
+			case 2: // mode button was pressed
+				if (!buttons_ms_counter) {
+					if (my_clocks.regime & 0b100) { // if is set
+						my_clocks.regime &= 0b11100011; // off set mode
+					} else { // if watch 
+						my_clocks.regime ^= 0b1; // switch alarm/time
+					}
 				}
-			} else { // if set
-				if (!buttons_ms_counter || (buttons_ms_counter >= 20 && !(buttons_ms_counter % 2))) {
-                                        if (my_clocks.regime & 0b1) { // alarm
-                                                if (my_clocks.regime & 0b1000) { // if hours
-                                                        my_clock.hours_alm = (my_clock.hours_alm > 0) ? --(my_clock.hours_alm) : 23;
-                                                        my_clock.hours_12_alm = (my_clock.hours_12_alm > 1) ? --(my_clock.hours_12_alm) : 12;
-                                                } else { // if minutes
-                                                        my_clock.minutes_alm = (my_clock.minutes_alm > 0) ? --(my_clock.minutes_alm) : 59;
-                                                }
-                                        } else { // time
-                                                if (my_clocks.regime & 0b1000) { // if hours
-                                                        my_clock.hours = (my_clock.hours > 0) ? --(my_clock.hours) : 23;
-                                                        my_clock.hours_12 = (my_clock.hours_12 > 1) ? --(my_clock.hours_12) : 12;
-                                                } else { // if minutes
-                                                        my_clock.minutes = (my_clock.minutes > 0) ? --(my_clock.minutes) : 59;
-                                                }
-                                        }
-                                }	
-			}
-			break;
-		default:
-			buttons_ms_timer = 0;
-			TIM4->SR &= ~TIM_SR_UIF;
-			// turn off timer
-			// enable external interrupts
-			return;
+				break;
+			case 4: // plus button was pressed
+				if (!(my_clocks.regime & 0b100)) { // if watch
+					if (!buttons_ms_counter) { 
+                                		if (my_clocks.regime & 0b1) {
+                                        		my_clocks.regime ^= 0b100000;
+                                		} else {
+                                        		my_clocks.regime ^= 0b10;
+                                		}
+					}
+                        	} else { // if set
+					if (!buttons_ms_counter || (buttons_ms_counter >= 20 && !(buttons_ms_counter % 2))) {
+						if (my_clocks.regime & 0b1) { // alarm
+							if (my_clocks.regime & 0b1000) { // if hours
+								my_clock.hours_alm = (my_clock.hours_alm < 23) ? ++(my_clock.hours_alm) : 0;
+				        	        	my_clock.hours_12_alm = (my_clock.hours_12_alm < 12) ? ++(my_clock.hours_12_alm) : 1;
+							} else { // if minutes
+								my_clock.minutes_alm = (my_clock.minutes_alm < 59) ? ++(my_clock.minutes_alm) : 0;
+							}
+						} else { // time
+							if (my_clocks.regime & 0b1000) { // if hours
+                                	        	        my_clock.hours = (my_clock.hours < 23) ? ++(my_clock.hours) : 0;
+                        	                	        my_clock.hours_12 = (my_clock.hours_12 < 12) ? ++(my_clock.hours_12) : 1;
+                	                        	} else { // if minutes
+                                        	        my_clock.minutes = (my_clock.minutes < 59) ? ++(my_clock.minutes) : 0;
+        	                                	}
+						}
+					}
+				} 
+				break;
+			case 8: // minus button was pressed
+				if (!(my_clocks.regime & 0b100) && !buttons_ms_counter) { // if watch 
+					if (my_clocks.regime & 0b1) {
+						my_clocks.regime ^= 0b1000000;
+					} else {
+						my_clocks.regime ^= 0b10000000;
+					}
+				} else { // if set
+					if (!buttons_ms_counter || (buttons_ms_counter >= 20 && !(buttons_ms_counter % 2))) {
+	                                        if (my_clocks.regime & 0b1) { // alarm
+	                                                if (my_clocks.regime & 0b1000) { // if hours
+                                                	        my_clock.hours_alm = (my_clock.hours_alm > 0) ? --(my_clock.hours_alm) : 23;
+                                        	                my_clock.hours_12_alm = (my_clock.hours_12_alm > 1) ? --(my_clock.hours_12_alm) : 12;
+                                	                } else { // if minutes
+                        	                                my_clock.minutes_alm = (my_clock.minutes_alm > 0) ? --(my_clock.minutes_alm) : 59;
+                	                                }
+        	                                } else { // time
+	                                                if (my_clocks.regime & 0b1000) { // if hours
+                                                        	my_clock.hours = (my_clock.hours > 0) ? --(my_clock.hours) : 23;
+                                                	        my_clock.hours_12 = (my_clock.hours_12 > 1) ? --(my_clock.hours_12) : 12;
+                                        	        } else { // if minutes
+                                	                        my_clock.minutes = (my_clock.minutes > 0) ? --(my_clock.minutes) : 59;
+                        	                        }
+                	                        }
+        	                        }	
+				}
+				break;
+			default:
+				buttons_ms_timer = 0;
+				TIM4->SR &= ~TIM_SR_UIF;
+				// turn off timer
+				// enable external interrupts
+				return;
+		}
 	}
 	TIM4->SR &= ~TIM_SR_UIF;
 	buttons_ms_counter = (buttons_ms_counter < 255) ? ++buttons_ms_counter : 20;
