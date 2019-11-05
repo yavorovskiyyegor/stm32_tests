@@ -278,10 +278,11 @@ void TIM2_IRQHandler(void) {
 		TIM5->PSC = 0;
 		// if some melody will be played -> set it to start
 	}
-	if (!(my_clock.regime & ALARM_SIGNAL) && my_clock.regime & HOURS_ON)) {
+	if (!(my_clock.regime & ALARM_SIGNAL) && my_clock.regime & HOURS_ON) {
 		if (my_clock.minutes == 0 && my_clock.seconds == 0) {
 			TIM5->PSC = HSI_Clock_Freq / 2637 * 10 - 1; // E, 4-th octave
 			TIM5->ARR = 9;
+			TIM5->
 		}
 	
 	}
@@ -333,13 +334,13 @@ void EXTI9_5_IRQHandler (void) {
 void TIM4_IRQHandler(void) { // 50 ms
 	static uint8_t buttons_ms_counter = 0;
 	static uint8_t code_counter = 4;
-	if (my_clock.regime & 0b10000000 && ~(GPIOA->IDR >> 5) & button_pressed) { // if display screen is off
+	if (my_clock.regime & DISPLAY_OFF && ~(GPIOA->IDR >> 5) & button_pressed) { // if display screen is off
 		// any button turn display on
 		if (!buttons_ms_counter) {
-			my_clock.regime &= 0b01111111;
+			my_clock.regime &= ~DISPLAY_OFF;
 		}
 		
-	} else if (my_clock.regime & 0b10000) { // if allarm is active
+	} else if (my_clock.regime & ALARM_SIGNAL) { // if allarm is active
 		switch(~(GPIOA->IDR >> 5) & button_pressed) {
 			case 1:
 				if (!buttons_ms_counter) {
@@ -370,7 +371,7 @@ void TIM4_IRQHandler(void) { // 50 ms
 		}
 		if (code_counter == 0) {
 			code_counter = 4;
-			my_clock.regime &= ~0b10000; // turn off alarm
+			my_clock.regime &= ~ALARM_SIGNAL; // turn off alarm
 			TIM5->CR1 &= ~TIM_CR1_CEN;
 		}
 	} else {
@@ -378,42 +379,42 @@ void TIM4_IRQHandler(void) { // 50 ms
 		switch () {
 			case 1:	// set button was pressed
 				if (!buttons_ms_counter) {   
-					if (my_clocks.regime & 0b100) { // if set mode
-						my_clocks.regime ^= 0b1000; // switch parameter to set
+					if (my_clocks.regime & SET_MODE) { // if set mode
+						my_clocks.regime ^= SET_MINUTES; // switch parameter to set
 					} else { // if watch 
-						my_clocks.regime |= 0b100; // on set mode
+						my_clocks.regime |= SET_MODE; // on set mode
 					}
 				}
 				break;	
 			case 2: // mode button was pressed
 				if (!buttons_ms_counter) {
-					if (my_clocks.regime & 0b100) { // if is set
-						my_clocks.regime &= 0b11110011; // off set mode
+					if (my_clocks.regime & SET_MODE) { // if is set
+						my_clocks.regime &= ~(SET_MODE | SET_MINUTES); // off set mode
 					} else { // if watch 
-						my_clocks.regime ^= 0b1; // switch alarm/time
+						my_clocks.regime ^= SHOW_ALARM; // switch alarm/time
 					}
 				}
 				break;
 			case 4: // plus button was pressed
-				if (!(my_clocks.regime & 0b100)) { // if watch
+				if (!(my_clocks.regime & SET_MODE)) { // if watch
 					if (!buttons_ms_counter) { 
-                		if (my_clocks.regime & 0b1) {
-    	            		my_clocks.regime ^= 0b100000;
+                		if (my_clocks.regime & SHOW_ALARM) {
+    	            		my_clocks.regime ^= ALARM_ON;
                       	} else {
-                    		my_clocks.regime ^= 0b10;
+                    		my_clocks.regime ^= MODE_12;
 						}
 					}
                 } else { // if set
 					if (!buttons_ms_counter || (buttons_ms_counter >= 20 && !(buttons_ms_counter % 2))) {
-						if (my_clocks.regime & 0b1) { // alarm
-							if (!(my_clocks.regime & 0b1000)) { // if hours
+						if (my_clocks.regime & SHOW_ALARM) { // alarm
+							if (!(my_clocks.regime & SET_MINUTES)) { // if hours
 								my_clock.hours_alm = (my_clock.hours_alm < 23) ? ++(my_clock.hours_alm) : 0;
 				        	        	my_clock.hours_12_alm = (my_clock.hours_12_alm < 12) ? ++(my_clock.hours_12_alm) : 1;
 							} else { // if minutes
 								my_clock.minutes_alm = (my_clock.minutes_alm < 59) ? ++(my_clock.minutes_alm) : 0;
 							}
 						} else { // time
-							if (!(my_clocks.regime & 0b1000)) { // if hours
+							if (!(my_clocks.regime & SET_MINUTES)) { // if hours
                 		        my_clock.hours = (my_clock.hours < 23) ? ++(my_clock.hours) : 0;
                     	        my_clock.hours_12 = (my_clock.hours_12 < 12) ? ++(my_clock.hours_12) : 1;
                         	} else { // if minutes
@@ -424,23 +425,23 @@ void TIM4_IRQHandler(void) { // 50 ms
 				} 
 				break;
 			case 8: // minus button was pressed
-				if (!(my_clocks.regime & 0b100) && !buttons_ms_counter) { // if watch 
-					if (my_clocks.regime & 0b1) {
-						my_clocks.regime ^= 0b1000000;
+				if (!(my_clocks.regime & SET_MODE) && !buttons_ms_counter) { // if watch 
+					if (my_clocks.regime & SHOW_ALARM) {
+						my_clocks.regime ^= HOURS_ON;
 					} else {
-						my_clocks.regime ^= 0b10000000;
+						my_clocks.regime ^= DISPLAY_OFF;
 					}
 				} else { // if set
 					if (!buttons_ms_counter || (buttons_ms_counter >= 20 && !(buttons_ms_counter % 2))) {
-	                    if (my_clocks.regime & 0b1) { // alarm
-	                        if (!(my_clocks.regime & 0b1000)) { // if hours
+	                    if (my_clocks.regime & SHOW_ALARM) { // alarm
+	                        if (!(my_clocks.regime & SET_MINUTES)) { // if hours
                             	my_clock.hours_alm = (my_clock.hours_alm > 0) ? --(my_clock.hours_alm) : 23;
                                 my_clock.hours_12_alm = (my_clock.hours_12_alm > 1) ? --(my_clock.hours_12_alm) : 12;
                             } else { // if minutes
                         		my_clock.minutes_alm = (my_clock.minutes_alm > 0) ? --(my_clock.minutes_alm) : 59;
                 	        }
         	            } else { // time
-	                        if (!(my_clocks.regime & 0b1000)) { // if hours
+	                        if (!(my_clocks.regime & SET_MINUTES)) { // if hours
                                 my_clock.hours = (my_clock.hours > 0) ? --(my_clock.hours) : 23;
                                 my_clock.hours_12 = (my_clock.hours_12 > 1) ? --(my_clock.hours_12) : 12;
                             } else { // if minutes
