@@ -11,49 +11,118 @@ volatile uint8_t button_pressed = 0;
 
 void GPIOConfig() {
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
-	GPIOA->MODER |= GPIO_MODER_MODE1_1;
+	GPIOA->MODER |= GPIO_MODER_MODE1_1; // PA1 - TIM5_CH2
+	GPIOA->MODER |= GPIO_MODER_MODE0_1; // PA0 - TIM5_CH1
 	GPIOA->MODER |= GPIO_MODER_MODE2_0 | GPIO_MODER_MODE3_0;
 	GPIOA->PUPDR |= GPIO_PUPDR_PUPD5_0;
 }
 
-void TIM2Config() { // handle buttons and LEDs
-
+void TIM2Config() { // handle LEDs
+	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+	TIM4->ARR = 999;
+	TIM2->PSC = HSI_Clock_Freq/1000 - 1;
+	TIM2->CR1 | TIM_CR1_URS;
+	TIM2->DIER |= TIM_DIER_UIE;
+	TIM2->CR1 |= TIM_CR1_CEN;
+	NVIC->ISER[0] |= 1 << 28;
 }
 
-void TIM4Config() {
-	
+void TIM4Config() { // handle buttons
+	RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
+	TIM4->ARR = 49;
+	TIM4->PSC = HSI_Clock_Freq/1000 - 1;
+	TIM4->CR1 |= TIM_CR1_URS; // interrupt only on counter over/underflow
+	TIM4->DIER |= TIM_DIER_UIE; // update interruppt enable
+	NVIC->ISER[0] |= 1 << 30; // NVIC info - STM32_Programming_Guide, Chapter 4
 }
 
 void TIM5Config() { // handle PWM
-
+	RCC->APB1ENR |= RCC_APB1ENR_TIM5EN;
+	TIM5->ARR = 99;
+	TIM5->PSC = HSI_Clock_Freq / (1000 * 100) - 1; // 1 kHz PWM with 0..99 Duty Cycle
+	TIM5->CR1 |= TIM_CR1_URS;
+	TIM5->CR1 |= TIM_CR1_CEN;
+	TIM5->CR1 |= TIM_CR1_ARPE; // enable preload register
+	TIM5->CCMR1 |= TIM_CCMR1_OC1M | TIM_CCMR1_OC2M; // upcounting PWM inactive when CNT < CCR
+	TIM5->CCR1 = 49;
+	TIM5->CCR2 = 0;
+	TIM5->CR1 | TIM_CR1_CEN; // enable timer 5
+	NVIC->ISER[0] |= << 1 << 31;
 }
 
 void EXTIConfig() {
-	button_pressed = (EXTI->PR >> 5) & 0x1;
-	NVIC->ISER[0] ^= 1 << 23;
-	EXTI->PR &= ~EXTI_PR_PR5;
-
+	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEE;
+	SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI5_PA;
+	EXTI->FTSR |= EXTI_FTSR_TR5;
+	EXTI->IMR |= EXTI_IMR_MR5;
+	NVIC->ISER[0] |= 1 << 23;
 }
 
 void EXTI9_5_IRQHandler(void) {
-	
+	NVIC->ISER[0] ^= 1 << 23;
+	EXTI->PR &= ~EXTI_PR_PR5;
+	TIM4->CR1 |= TIM_CR1_CEN;
+	TIM5->CCE |= TIM_CCE_CC1E; // enables TIM5_CH1 output PA0
+	TIM5->DIER |= TIM_DIER_UIE; // enable interrupts to stop button sound;
+}
+
+void TIM5_IRQHandler(void) {
+	static uint8_t ms_counter = 0;
+	ms_counter++;
+	if (ms_counter == 255) {
+		ms_counter = 0;
+		TIM5->CCE &= ~TIM_CCE_CC1E;
+		TIM5->DIER &= ~ TIM_DIER_UIE; 
+	}
 }
 
 void TIM4_IRQHandler(void) { // handle buttons
-	
+	// this approach allows to react only to one button at a time
+	static uint8_t buttons_counter = 0;
+	if (GPIOA->IDR >> 5 & 0x1) {
+		buttons_counter += (buttons_counter <= 100) ? 1 : -60;
+		if (buttons_counter == 40) {
+			regime ^= 0x4;
+			if (regime & 0x4) {
+				GPIOA->BSRR = (regime & 0x3) << 2;
+			}
+		}
+	} else {
+		if (buttons_counter) {
+			if (buttons_counter < 40) {
+				regime &= 0b100 | ((regime + 1) & 0b11);
+			}
+			//GPIOA->BSRR = (regime & 0b11) << 2;
+			//GPIOA->BSRR = (~regime & 0b11) << 2 << 16;
+			buttons_counter = 0;
+		}
+		TIM4->CR1 &= ~TIM4_CR1_CEN;
+		TIM4->CNT = 0;
+		NVIC->ISER[0] |= 1 << 23; 
+	}	
 }
 
 void TIM2_IRQHandler(void) {	
-	static uint16_t ms_counter = 0;
-	static uint8_t buttons_counter = 0;
+	static uint8_t seconds_counter = 0;
+	static uint8_t increase_duty = 1;
 
 	switch (seconds_counter) {
-		case 10:
-			// turn on PWM
+		case 3:
+			// turn on PWM;
+			if (increase_duty) {
+				TIM5->CCR += 1;
+			} else {
+				TIM5->CCR -= 1;
+			}
+			if (TIM5->CCR == 99 || TIM5->CCR == 0) {
+				increase_duty = !increase_duty;
+			}
+			TIM5->CCER |= TIM_CCER_CC2E;
 			break;
-		case 12:
+		case 6:
 			seconds_counter = 0;
 			// turn off PWM
+			TIM5->CCER &= ~TIM_CCER_CC2E;
 			break;
 		default:
 			seconds_counter++;
@@ -61,9 +130,10 @@ void TIM2_IRQHandler(void) {
 
 	if (!(regime & NO_BLINK)) {
 		if (regime & FIRST_LED_ON && seconds_counter % 2) {
-			GPIOA->BSRR |= (GPIOA->ODR & GPIO
+			GPIOA->BSRR |= 
 		}
 	}
+
 }
 
 int main(void) {
