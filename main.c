@@ -24,11 +24,12 @@ void GPIOConfig() {
 	GPIOA->MODER |= GPIO_MODER_MODE0_1; // PA0 - TIM5_CH1
 	GPIOA->MODER |= GPIO_MODER_MODE2_0 | GPIO_MODER_MODE3_0;
 	GPIOA->PUPDR |= GPIO_PUPDR_PUPD5_0;
+	GPIOA->AFR[0] |= GPIO_AFRL_AFSEL0_1 | GPIO_AFRL_AFSEL1_1; // datasheet table 9
 }
 
 void TIM2Config() { // handle LEDs
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
-	TIM4->ARR = 999;
+	TIM2->ARR = 999;
 	TIM2->PSC = HSI_Clock_Freq/1000 - 1;
 	TIM2->CR1 |= TIM_CR1_URS;
 	TIM2->DIER |= TIM_DIER_UIE;
@@ -55,7 +56,7 @@ void TIM5Config() { // handle PWM
 	TIM5->CCR1 = 49;
 	TIM5->CCR2 = 0;
 	TIM5->CR1 |= TIM_CR1_CEN; // enable timer 5
-	NVIC->ISER[0] |= 1 << 31;
+	NVIC->ISER[1] |= 1 << 18;
 }
 
 void EXTIConfig() {
@@ -67,8 +68,9 @@ void EXTIConfig() {
 }
 
 void EXTI9_5_IRQHandler(void) {
-	NVIC->ISER[0] ^= 1 << 23;
+	//NVIC->ISER[0] ^= 1 << 23;
 	EXTI->PR &= ~EXTI_PR_PR5;
+	EXTI->IMR &= ~EXTI_IMR_MR5;
 	TIM4->CR1 |= TIM_CR1_CEN;
 	TIM5->CCER |= TIM_CCER_CC1E; // enables TIM5_CH1 output PA0
 	TIM5->DIER |= TIM_DIER_UIE; // enable interrupts to stop button sound;
@@ -77,11 +79,12 @@ void EXTI9_5_IRQHandler(void) {
 void TIM5_IRQHandler(void) {
 	static uint8_t ms_counter = 0;
 	ms_counter++;
-	if (ms_counter == 255) {
+	if (ms_counter == 250) {
 		ms_counter = 0;
 		TIM5->CCER &= ~TIM_CCER_CC1E;
 		TIM5->DIER &= ~TIM_DIER_UIE; 
 	}
+	TIM5->SR &= ~TIM_SR_UIF;
 }
 
 void TIM4_IRQHandler(void) { // handle buttons
@@ -108,8 +111,10 @@ void TIM4_IRQHandler(void) { // handle buttons
 		}
 		TIM4->CR1 &= ~TIM_CR1_CEN;
 		TIM4->CNT = 0;
-		NVIC->ISER[0] |= 1 << 23; 
-	}	
+		EXTI->IMR |= EXTI_IMR_MR5;
+		//NVIC->ISER[0] |= 1 << 23; 
+	}
+	TIM4->SR &= ~TIM_SR_UIF;	
 }
 
 void TIM2_IRQHandler(void) {	
@@ -124,10 +129,11 @@ void TIM2_IRQHandler(void) {
 			} else {
 				TIM5->CCR2 -= 1;
 			}
-			if (TIM5->CCR2 >= 99 || TIM5->CCR2 == 0) {
+			if (TIM5->CCR2 >= 98 || TIM5->CCR2 == 0) {
 				increase_duty = !increase_duty;
 			}
 			TIM5->CCER |= TIM_CCER_CC2E; // enables TIM5_CH2 output PA1
+			seconds_counter++;
 			break;
 		case 6:
 			seconds_counter = 0;
@@ -140,19 +146,24 @@ void TIM2_IRQHandler(void) {
 
 	if (!(regime & NO_BLINK)) { // if blink mode is active
 		if (regime & FIRST_LED_ON && seconds_counter % 2) {
-			GPIOA->BSRR |= 1 << 2;
+			GPIOA->BSRR = 1 << 2;
 		} else {
-			GPIOA->BSRR |= 1 << 18;
+			GPIOA->BSRR = 1 << 18;
 		}
 		if (regime & SECOND_LED_ON && !(seconds_counter % 3)) {
-			GPIOA->BSRR |= 1 << 3;
+			GPIOA->BSRR = 1 << 3;
 		} else {
-			GPIOA->BSRR |= 1 << 19;
+			GPIOA->BSRR = 1 << 19;
 		}
 	}
+	TIM2->SR &= ~TIM_SR_UIF;
 }
 
 int main(void) {
+
+	volatile int i = 0;
+
+	i++;
 
 	GPIOConfig();
 
