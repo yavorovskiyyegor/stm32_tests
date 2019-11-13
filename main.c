@@ -52,7 +52,8 @@ void TIM5Config() { // handle PWM
 	TIM5->PSC = HSI_Clock_Freq / (1000 * 100) - 1; // 1 kHz PWM with 0..99 Duty Cycle
 	TIM5->CR1 |= TIM_CR1_URS;
 	TIM5->CR1 |= TIM_CR1_ARPE; // enable preload register
-	TIM5->CCMR1 |= TIM_CCMR1_OC1M | TIM_CCMR1_OC2M; // upcounting PWM inactive when CNT < CCR
+	//TIM5->CCMR1 |= TIM_CCMR1_OC1M | TIM_CCMR1_OC2M; // upcounting PWM inactive when CNT < CCR
+	TIM5->CCMR1 |= TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2; // seem like it's wrong in reference manual
 	TIM5->CCR1 = 49;
 	TIM5->CCR2 = 0;
 	TIM5->CR1 |= TIM_CR1_CEN; // enable timer 5
@@ -69,7 +70,7 @@ void EXTIConfig() {
 
 void EXTI9_5_IRQHandler(void) {
 	//NVIC->ISER[0] ^= 1 << 23;
-	EXTI->PR &= ~EXTI_PR_PR5;
+	EXTI->PR |= EXTI_PR_PR5; // to clear pending register have to write 1 there!
 	EXTI->IMR &= ~EXTI_IMR_MR5;
 	TIM4->CR1 |= TIM_CR1_CEN;
 	TIM5->CCER |= TIM_CCER_CC1E; // enables TIM5_CH1 output PA0
@@ -90,7 +91,7 @@ void TIM5_IRQHandler(void) {
 void TIM4_IRQHandler(void) { // handle buttons
 	// this approach allows to react only to one button at a time
 	static uint8_t buttons_counter = 0;
-	if (!(GPIOA->IDR >> 5) & 0x1) {
+	if (~(GPIOA->IDR >> 5) & 0x1) {
 		buttons_counter += (buttons_counter <= 100) ? 1 : -60;
 		if (buttons_counter == 40) {
 			regime ^= 0x4;
