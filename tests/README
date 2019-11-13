@@ -6,3 +6,4 @@
 05 - clocks on 7 segment displays (1 digit for seconds is missing), no set, no alarm.
 06 - clocks on 7 segment dispalys (hours.minutes.seconds), no set, no alarm (not tested)
 07 - clocks on 7 segment displays (work in progress)
+08 - EXTI example finished tested program

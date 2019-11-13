@@ -1,25 +1,24 @@
 /*
-Receive signals:
-1) Command to change some variable value (changed_val) | Value_MSB | Value_LSB
-2) Command to switch LED
-Send signals:
-1) Each 10 seconds send counter value
-2) Each button press send current variable value (changed_value)
+3 LEDs, 1 buzzer, 1 button
+PA0 - Buzzer turns on for 0.25 s when a button is pressed
+PA1 - LED which intencity changes in time blinks with a period 6 seconds (3 off, 3 on)
+PA2 - LED which blinks with a pediod 2 seconds (1 on, 1 off)
+PA3 - LED which blinks with a period 3 seconds (1 on, 2 off)
+PA5 - push button
 */
 
 #include "stm32f407xx.h"
 
 #define HSI_Clock_Freq 16000000
 
+#define FIRST_LED_ON 0x1
+#define SECOND_LED_ON 0x2
+#define NO_BLINK 0x4
+
 volatile uint8_t regime = 0;
 volatile uint8_t button_pressed = 0;
-volatile uint16_t changed_value = 0;
 
-void UARTConfig() {
-	
-}
-
-void GPIOConfig() { 
+void GPIOConfig() {
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
 	GPIOA->MODER |= GPIO_MODER_MODE1_1; // PA1 - TIM5_CH2
 	GPIOA->MODER |= GPIO_MODER_MODE0_1; // PA0 - TIM5_CH1
@@ -47,6 +46,20 @@ void TIM4Config() { // handle buttons
 	NVIC->ISER[0] |= 1 << 30; // NVIC info - STM32_Programming_Guide, Chapter 4
 }
 
+void TIM5Config() { // handle PWM
+	RCC->APB1ENR |= RCC_APB1ENR_TIM5EN;
+	TIM5->ARR = 99;
+	TIM5->PSC = HSI_Clock_Freq / (1000 * 100) - 1; // 1 kHz PWM with 0..99 Duty Cycle
+	TIM5->CR1 |= TIM_CR1_URS;
+	TIM5->CR1 |= TIM_CR1_ARPE; // enable preload register
+	//TIM5->CCMR1 |= TIM_CCMR1_OC1M | TIM_CCMR1_OC2M; // upcounting PWM inactive when CNT < CCR
+	TIM5->CCMR1 |= TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2; // seem like it's wrong in reference manual
+	TIM5->CCR1 = 49;
+	TIM5->CCR2 = 0;
+	TIM5->CR1 |= TIM_CR1_CEN; // enable timer 5
+	NVIC->ISER[1] |= 1 << 18;
+}
+
 void EXTIConfig() {
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 	SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI5_PA;
@@ -60,6 +73,19 @@ void EXTI9_5_IRQHandler(void) {
 	EXTI->PR |= EXTI_PR_PR5; // to clear pending register have to write 1 there!
 	EXTI->IMR &= ~EXTI_IMR_MR5;
 	TIM4->CR1 |= TIM_CR1_CEN;
+	TIM5->CCER |= TIM_CCER_CC1E; // enables TIM5_CH1 output PA0
+	TIM5->DIER |= TIM_DIER_UIE; // enable interrupts to stop button sound;
+}
+
+void TIM5_IRQHandler(void) {
+	static uint8_t ms_counter = 0;
+	ms_counter++;
+	if (ms_counter == 250) {
+		ms_counter = 0;
+		TIM5->CCER &= ~TIM_CCER_CC1E;
+		TIM5->DIER &= ~TIM_DIER_UIE; 
+	}
+	TIM5->SR &= ~TIM_SR_UIF;
 }
 
 void TIM4_IRQHandler(void) { // handle buttons
